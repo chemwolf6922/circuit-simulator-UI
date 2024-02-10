@@ -8,6 +8,8 @@ interface ChipProps {
   info:ChipInfo;
   hooks:{
     onChipMouseDown:(id:string,e:React.MouseEvent)=>void;
+    onPinMouseDown:(chip:string,pin:string,e:React.MouseEvent)=>void;
+    onPinMouseUp:(chip:string,pin:string,e:React.MouseEvent)=>void;
   }
 }
 
@@ -22,8 +24,6 @@ class ChipUI extends React.Component<ChipProps> {
     return <div></div>;
   }
   onBodyMouseDown(e:React.MouseEvent){
-    e.preventDefault();
-    e.stopPropagation();
     this.props.hooks.onChipMouseDown(this.props.id,e);
   }
   getPinOffset(pin:string):{x:number,y:number}{
@@ -48,7 +48,10 @@ class ChipUI extends React.Component<ChipProps> {
       <div className='Chip' ref={this.#chipRef}>
         <div className='ChipInputs'>
           {this.props.info.inputPins.map(pin=>
-            <div className='ChipInput' ref={this.#pinRefs[pin]} key={pin}>{pin}</div>
+            <div className='ChipInput' ref={this.#pinRefs[pin]} key={pin}
+              onMouseDown={(e)=>{this.props.hooks.onPinMouseDown(this.props.id,pin,e)}}
+              onMouseUp={(e)=>(this.props.hooks.onPinMouseUp(this.props.id,pin,e))}
+            >{pin}</div>
           )}
         </div>
         <div className='ChipBody' 
@@ -60,7 +63,10 @@ class ChipUI extends React.Component<ChipProps> {
         </div>
         <div className='ChipOutputs'>
           {this.props.info.outputPins.map(pin=>
-            <div className='ChipOutput' ref={this.#pinRefs[pin]} key={pin}>{pin}</div>
+            <div className='ChipOutput' ref={this.#pinRefs[pin]} key={pin}
+              onMouseDown={(e)=>{this.props.hooks.onPinMouseDown(this.props.id,pin,e)}}
+              onMouseUp={(e)=>(this.props.hooks.onPinMouseUp(this.props.id,pin,e))}
+            >{pin}</div>
           )}
         </div>
       </div>
@@ -70,10 +76,6 @@ class ChipUI extends React.Component<ChipProps> {
 
 interface ConnectionProps {
   info:{
-    chipA:string;
-    pinA:string;
-    chipB:string;
-    pinB:string;
     src:{x:number,y:number};
     dst:{x:number,y:number};
   }
@@ -158,6 +160,12 @@ class App extends React.Component {
       dst:{x:number,y:number};
     }>;
     showAddChipDialog:boolean;
+    drawLine?:{
+      srcChip:string;
+      srcPin:string;
+      src:{x:number,y:number};
+      dst:{x:number,y:number};
+    }
   } = {
     canvasPosition:{x:0,y:0},
     chips:{},
@@ -165,12 +173,71 @@ class App extends React.Component {
     showAddChipDialog:false,
   };
   onChipMouseDown(id:string,e:React.MouseEvent){
+    e.stopPropagation();
+    e.preventDefault();
     this.#chipMoving = true;
     this.#movingChip = id;
     this.#chipMovingOffset = {
       x:e.screenX-this.state.chips[id].position.x,
       y:e.screenY-this.state.chips[id].position.y
     };
+  }
+  onPinMouseDown(chip:string,pin:string,e:React.MouseEvent){
+    e.stopPropagation();
+    e.preventDefault();
+    this.setState({
+      drawLine:{
+        srcChip:chip,
+        srcPin:pin,
+        src:{x:0,y:0},
+        dst:{x:e.clientX-this.state.canvasPosition.x,y:e.clientY-this.state.canvasPosition.y}
+      }
+    })
+  }
+  onPinMouseUp(chip:string,pin:string,e:React.MouseEvent){
+    if(this.state.drawLine===undefined){
+      return;
+    }
+    e.stopPropagation();
+    e.preventDefault();
+    /** check for self conection and existing connections */
+    let onlyClearDrawingLine = false;
+    do {
+      if(this.state.drawLine.srcChip===chip && this.state.drawLine.srcPin===pin){
+        onlyClearDrawingLine = true;
+        break;
+      }
+      for(const c of this.state.connections){
+        if((c.chipA===this.state.drawLine.srcChip && c.pinA===this.state.drawLine.srcPin 
+            && c.chipB===chip && c.pinB===pin)
+          ||(c.chipB===this.state.drawLine.srcChip && c.pinB===this.state.drawLine.srcPin 
+            && c.chipA===chip && c.pinA===pin))
+        {
+          onlyClearDrawingLine = true;
+          break;
+        }
+      }
+    } while (false);
+    if(onlyClearDrawingLine){
+      this.setState({
+        drawLine:undefined
+      });
+      return;
+    }
+    this.setState({
+      drawLine:undefined,
+      connections:[
+        ...this.state.connections,
+        {
+          chipA:this.state.drawLine.srcChip,
+          pinA:this.state.drawLine.srcPin,
+          chipB:chip,
+          pinB:pin,
+          src:{...this.state.drawLine.src},
+          dst:{...this.state.drawLine.dst}
+        }
+      ]
+    });
   }
   onMouseDown(e:MouseEvent){
     if(this.#spaceDown){
@@ -187,6 +254,9 @@ class App extends React.Component {
     }
     if(this.#screenMoving){
       this.#screenMoving = false;
+    }
+    if(this.state.drawLine !== undefined){
+      this.setState({drawLine:undefined});
     }
   }
   onMouseMove(e:MouseEvent){
@@ -213,6 +283,19 @@ class App extends React.Component {
       const y = e.screenY-this.#screenMovingOffset.y;
       this.setState({
         canvasPosition:{x,y}
+      });
+      return;
+    }
+    if(this.state.drawLine !== undefined){
+      e.preventDefault();
+      e.stopPropagation();
+      const x = e.clientX - this.state.canvasPosition.x;
+      const y = e.clientY - this.state.canvasPosition.y;
+      this.setState({
+        drawLine:{
+          ...this.state.drawLine,
+          dst:{x,y}
+        }
       });
       return;
     }
@@ -269,6 +352,14 @@ class App extends React.Component {
     /** To init the lines */
     this.setState(this.state);
   }
+  getPinPosition(chip:string, pin:string):{x:number,y:number}{
+    const offset = this.state.chips[chip]?.ref.current?.getPinOffset(pin);
+    if(offset === undefined){
+      throw new Error('Pin not found');
+    }
+    const srcChip = {x:this.state.chips[chip].position.x, y:this.state.chips[chip].position.y};
+    return {x:srcChip.x+offset.x, y:srcChip.y+offset.y};
+  }
   getConnectionPositions():Array<{
     chipA:string;
     pinA:string;
@@ -279,25 +370,28 @@ class App extends React.Component {
   }>{
     let connections = [];
     for(const c of this.state.connections){
-      const srcOffset = this.state.chips[c.chipA].ref.current?.getPinOffset(c.pinA);
-      const dstOffset = this.state.chips[c.chipB].ref.current?.getPinOffset(c.pinB);
-      if(srcOffset === undefined || dstOffset === undefined){
-        continue;
-      }
-      const srcChip = {x:this.state.chips[c.chipA].position.x,y:this.state.chips[c.chipA].position.y};
-      const dstChip = {x:this.state.chips[c.chipB].position.x,y:this.state.chips[c.chipB].position.y};
-      connections.push({
-        ...c,
-        src:{x:srcChip.x+srcOffset.x,y:srcChip.y+srcOffset.y},
-        dst:{x:dstChip.x+dstOffset.x,y:dstChip.y+dstOffset.y}
-      });
+      try {
+        const src = this.getPinPosition(c.chipA, c.pinA);
+        const dst = this.getPinPosition(c.chipB, c.pinB);
+        connections.push({
+          ...c,
+          src,
+          dst
+        });
+      } catch (error) {}
     }
     return connections;
   }
   setState(s:React.SetStateAction<any>){
     /** render chips first, then update connections */
     super.setState(s,()=>{
-      super.setState({connections:this.getConnectionPositions()});
+      super.setState({
+        connections:this.getConnectionPositions(),
+        drawLine:this.state.drawLine?{
+          ...this.state.drawLine,
+          src:this.getPinPosition(this.state.drawLine.srcChip,this.state.drawLine.srcPin)
+        }:undefined
+      });
     });
   }
   render() {
@@ -307,7 +401,9 @@ class App extends React.Component {
           {Object.entries(this.state.chips).map(([n,c])=>
             <div key={n} style={{left:c.position.x,top:c.position.y}} className='ChipContainer'>
               <ChipUI ref={c.ref} {...{id:n,info:c.info,hooks:{
-                onChipMouseDown:this.onChipMouseDown.bind(this)
+                onChipMouseDown:this.onChipMouseDown.bind(this),
+                onPinMouseDown:this.onPinMouseDown.bind(this),
+                onPinMouseUp:this.onPinMouseUp.bind(this)
               }}} />
             </div>
           )}
@@ -317,6 +413,12 @@ class App extends React.Component {
               <ConnectionUI {...{info:c}}/>
             </div>
           )}
+          {this.state.drawLine !== undefined?
+            <div className='ConnectionContainer'
+            style={{left:Math.min(this.state.drawLine.src.x,this.state.drawLine.dst.x)-5,top:Math.min(this.state.drawLine.src.y,this.state.drawLine.dst.y)-5}}>
+              <ConnectionUI {...{info:this.state.drawLine}}/>
+            </div>
+          :<div/>}
         </div>
         <div className='Menu'>
           <button className='MenuButton' onClick={this.onAddChipButtonClick.bind(this)}>Add Chip</button>
