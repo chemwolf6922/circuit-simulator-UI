@@ -1,7 +1,7 @@
 import React, { RefObject, createRef } from 'react';
 import './App.css';
 import { CHIPS } from 'circuit-simulator';
-import { Chip, ChipInfo } from 'circuit-simulator/src/Chip';
+import { ChipInfo } from 'circuit-simulator/src/Chip';
 
 interface ChipProps {
   id:string;
@@ -10,7 +10,8 @@ interface ChipProps {
     onChipMouseDown:(id:string,e:React.MouseEvent)=>void;
     onPinMouseDown:(chip:string,pin:string,e:React.MouseEvent)=>void;
     onPinMouseUp:(chip:string,pin:string,e:React.MouseEvent)=>void;
-  }
+  };
+  selected:boolean;
 }
 
 class ChipUI extends React.Component<ChipProps> {
@@ -54,7 +55,7 @@ class ChipUI extends React.Component<ChipProps> {
             >{pin}</div>
           )}
         </div>
-        <div className='ChipBody' 
+        <div className={this.props.selected?'ChipBody ChipBodySelected':'ChipBody'} 
           onMouseDown={this.onBodyMouseDown.bind(this)}>
           <div className='ChipBodyType'>
             {this.props.info.name}
@@ -75,26 +76,37 @@ class ChipUI extends React.Component<ChipProps> {
 }
 
 interface ConnectionProps {
+  index?:number,
   info:{
     src:{x:number,y:number};
     dst:{x:number,y:number};
+  },
+  lineType?:string,
+  hooks?:{
+    onMouseDown:(index:number,e:React.MouseEvent)=>void;
   }
 }
 
 class ConnectionUI extends React.Component<ConnectionProps> {
+  onMouseDown(e:React.MouseEvent){
+    console.log('line mouse down');
+    this.props.hooks?.onMouseDown(this.props.index??-1,e);
+  }
   render(): React.ReactNode {
     const anchorX = Math.min(this.props.info.src.x,this.props.info.dst.x);
     const anchorY = Math.min(this.props.info.src.y,this.props.info.dst.y);
     const width = Math.abs(this.props.info.dst.x-this.props.info.src.x);
     const height = Math.abs(this.props.info.dst.y-this.props.info.src.y);
     return (
-      <svg className='Connection' 
+      <svg className={this.props.lineType!==undefined?`Connection ConnectionType${this.props.lineType}`:'Connection'} 
         width={width + 10} 
         height={height + 10}>
-        <line x1={this.props.info.src.x - anchorX + 5} 
+        <line className='ConnectionLine'
+              x1={this.props.info.src.x - anchorX + 5} 
               y1={this.props.info.src.y - anchorY + 5} 
               x2={this.props.info.dst.x - anchorX + 5} 
-              y2={this.props.info.dst.y - anchorY + 5} />
+              y2={this.props.info.dst.y - anchorY + 5} 
+              onMouseDown={this.onMouseDown.bind(this)}/>
       </svg>
     );
   }
@@ -165,7 +177,9 @@ class App extends React.Component {
       srcPin:string;
       src:{x:number,y:number};
       dst:{x:number,y:number};
-    }
+    };
+    selectedChip?:string;
+    selectedConnection?:number;
   } = {
     canvasPosition:{x:0,y:0},
     chips:{},
@@ -181,6 +195,10 @@ class App extends React.Component {
       x:e.screenX-this.state.chips[id].position.x,
       y:e.screenY-this.state.chips[id].position.y
     };
+    this.setState({
+      selectedChip:id,
+      selectedConnection:undefined
+    });
   }
   onPinMouseDown(chip:string,pin:string,e:React.MouseEvent){
     e.stopPropagation();
@@ -191,7 +209,9 @@ class App extends React.Component {
         srcPin:pin,
         src:{x:0,y:0},
         dst:{x:e.clientX-this.state.canvasPosition.x,y:e.clientY-this.state.canvasPosition.y}
-      }
+      },
+      selectedChip:undefined,
+      selectedConnection:undefined,
     })
   }
   onPinMouseUp(chip:string,pin:string,e:React.MouseEvent){
@@ -239,6 +259,14 @@ class App extends React.Component {
       ]
     });
   }
+  onConnectionMouseDown(index:number, e:React.MouseEvent){
+    e.stopPropagation();
+    e.preventDefault();
+    this.setState({
+      selectedChip:undefined,
+      selectedConnection:index
+    });
+  }
   onMouseDown(e:MouseEvent){
     if(this.#spaceDown){
       this.#screenMoving = true;
@@ -247,6 +275,12 @@ class App extends React.Component {
         y:e.screenY-this.state.canvasPosition.y
       };
     }
+    if(this.state.selectedChip!==undefined || this.state.selectedConnection!==undefined){
+      this.setState({
+        selectedChip:undefined,
+        selectedConnection:undefined
+      });
+    }  
   }
   onMouseUp(e:MouseEvent){
     if(this.#chipMoving){
@@ -301,17 +335,49 @@ class App extends React.Component {
     }
   }
   onKeyDown(e:KeyboardEvent){
-    if(e.key === ' '){
-      this.#spaceDown = true;
-      e.preventDefault();
-      e.stopPropagation();
+    switch (e.key) {
+      case ' ':
+        this.#spaceDown = true;
+        e.preventDefault();
+        e.stopPropagation();
+        break;
+      case 'Delete':
+        e.preventDefault();
+        e.stopPropagation();
+        if(this.state.selectedChip !== undefined){
+          this.setState({
+            chips:Object.fromEntries(Object.entries(this.state.chips).filter(([n,c])=>n!==this.state.selectedChip)),
+            connections:this.state.connections.filter(c=>c.chipA!==this.state.selectedChip&&c.chipB!==this.state.selectedChip),
+            selectedChip:undefined,
+          })
+        }else if(this.state.selectedConnection !== undefined 
+                && this.state.connections[this.state.selectedConnection]!==undefined){
+          let connections = [];
+          for(let i=0;i<this.state.connections.length;i++){
+            if(i===this.state.selectedConnection){
+              break;
+            }
+            connections.push(this.state.connections[i]);
+          }
+          this.setState({
+            connections:connections,
+            selectedConnection:undefined
+          });
+        }
+        break;
+      default:
+        break;
     }
   }
   onKeyUp(e:KeyboardEvent){
-    if(e.key === ' '){
-      this.#spaceDown = false;
-      e.preventDefault();
-      e.stopPropagation();
+    switch (e.key){
+      case ' ':
+        this.#spaceDown = false;
+        e.preventDefault();
+        e.stopPropagation();
+        break;
+      default:
+        break;
     }
   }
   onAddChipButtonClick(){
@@ -334,7 +400,7 @@ class App extends React.Component {
         [chipId]:{
           info:chipClass.info,
           ref:createRef(),
-          position:{x:100,y:100}
+          position:{x:100-this.state.canvasPosition.x,y:100-this.state.canvasPosition.y}
         }
       }
     })
@@ -400,23 +466,28 @@ class App extends React.Component {
         <div className='Canvas' style={{left:this.state.canvasPosition.x,top:this.state.canvasPosition.y}}>
           {Object.entries(this.state.chips).map(([n,c])=>
             <div key={n} style={{left:c.position.x,top:c.position.y}} className='ChipContainer'>
-              <ChipUI ref={c.ref} {...{id:n,info:c.info,hooks:{
+              <ChipUI ref={c.ref} id={n} info={c.info} selected={n===this.state.selectedChip} hooks={{
                 onChipMouseDown:this.onChipMouseDown.bind(this),
                 onPinMouseDown:this.onPinMouseDown.bind(this),
                 onPinMouseUp:this.onPinMouseUp.bind(this)
-              }}} />
+              }} />
             </div>
           )}
           {this.state.connections.map((c,i)=>
             <div key={i} className='ConnectionContainer' 
               style={{left:Math.min(c.src.x,c.dst.x)-5,top:Math.min(c.src.y,c.dst.y)-5}}>
-              <ConnectionUI {...{info:c}}/>
+              <ConnectionUI 
+                index={i}
+                hooks={{onMouseDown:this.onConnectionMouseDown.bind(this)}}
+                lineType={this.state.selectedConnection===i?'Selected':undefined} 
+                info={c}
+              />
             </div>
           )}
           {this.state.drawLine !== undefined?
             <div className='ConnectionContainer'
             style={{left:Math.min(this.state.drawLine.src.x,this.state.drawLine.dst.x)-5,top:Math.min(this.state.drawLine.src.y,this.state.drawLine.dst.y)-5}}>
-              <ConnectionUI {...{info:this.state.drawLine}}/>
+              <ConnectionUI info={this.state.drawLine}/>
             </div>
           :<div/>}
         </div>
