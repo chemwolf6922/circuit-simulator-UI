@@ -52,7 +52,7 @@ class ChipUI extends React.Component<ChipProps> {
             <div className='ChipInput' ref={this.#pinRefs[pin]} key={pin}
               onMouseDown={(e)=>{this.props.hooks.onPinMouseDown(this.props.id,pin,e)}}
               onMouseUp={(e)=>(this.props.hooks.onPinMouseUp(this.props.id,pin,e))}
-            >{pin}</div>
+            ><div className='PinText'>{pin}</div></div>
           )}
         </div>
         <div className={this.props.selected?'ChipBody ChipBodySelected':'ChipBody'} 
@@ -67,7 +67,7 @@ class ChipUI extends React.Component<ChipProps> {
             <div className='ChipOutput' ref={this.#pinRefs[pin]} key={pin}
               onMouseDown={(e)=>{this.props.hooks.onPinMouseDown(this.props.id,pin,e)}}
               onMouseUp={(e)=>(this.props.hooks.onPinMouseUp(this.props.id,pin,e))}
-            >{pin}</div>
+            ><div className='PinText'>{pin}</div></div>
           )}
         </div>
       </div>
@@ -89,7 +89,6 @@ interface ConnectionProps {
 
 class ConnectionUI extends React.Component<ConnectionProps> {
   onMouseDown(e:React.MouseEvent){
-    console.log('line mouse down');
     this.props.hooks?.onMouseDown(this.props.index??-1,e);
   }
   render(): React.ReactNode {
@@ -215,6 +214,7 @@ class App extends React.Component {
     })
   }
   onPinMouseUp(chip:string,pin:string,e:React.MouseEvent){
+    console.log(`pin mouse up ${chip} ${pin}`);
     if(this.state.drawLine===undefined){
       return;
     }
@@ -355,7 +355,7 @@ class App extends React.Component {
           let connections = [];
           for(let i=0;i<this.state.connections.length;i++){
             if(i===this.state.selectedConnection){
-              break;
+              continue;
             }
             connections.push(this.state.connections[i]);
           }

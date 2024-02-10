@@ -83,6 +83,10 @@ body {
   user-select: none;
 }
 
+.PinText {
+  pointer-events: none;
+}
+
 .ConnectionContainer {
   position:absolute;
   pointer-events: none;
