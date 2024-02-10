@@ -3,11 +3,11 @@ body {
 }
 
 .Canvas {
-  position:absolute;
+  position: absolute;
 }
 
 .ChipContainer {
-  position:absolute;
+  position: absolute;
 }
 
 .Chip {
@@ -21,7 +21,7 @@ body {
   background-color: transparent;
   color: white;
   border-radius: 5px;
-  
+
 }
 
 .ChipInputs {
@@ -38,6 +38,7 @@ body {
   padding-right: 10px;
   background-color: silver;
   color: black;
+  user-select: none;
 }
 
 .ChipBody {
@@ -55,7 +56,8 @@ body {
 }
 
 .ChipBodyType {
-  align-self:center;
+  align-self: center;
+  user-select: none;
 }
 
 .ChipOutputs {
@@ -72,5 +74,44 @@ body {
   padding-right: 10px;
   background-color: silver;
   color: black;
+  user-select: none;
 }
 
+.ConnectionContainer {
+  position:absolute;
+  pointer-events: none;
+}
+
+.Connection {
+  stroke: goldenrod;
+  stroke-width: 2;
+  position:absolute;
+}
+
+.Menu {
+  z-index: 1;
+  position: absolute;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: center;
+  background-color: transparent;
+  padding-top: 5px;
+  padding-bottom: 5px;
+  padding-left: 15px;
+  padding-right: 15px;
+  user-select: none;
+}
+
+.MenuButton {
+  margin-left: 5px;
+  margin-right: 5px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+  padding-left: 10px;
+  padding-right: 10px;
+  background-color: #6c757d;
+  color: white;
+  border-radius: 5px;
+  user-select: none;
+}
