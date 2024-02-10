@@ -1,7 +1,7 @@
-import React, { RefObject } from 'react';
+import React, { RefObject, createRef } from 'react';
 import './App.css';
 import { CHIPS } from 'circuit-simulator';
-import { ChipInfo } from 'circuit-simulator/src/Chip';
+import { Chip, ChipInfo } from 'circuit-simulator/src/Chip';
 
 interface ChipProps {
   id:string;
@@ -98,6 +98,42 @@ class ConnectionUI extends React.Component<ConnectionProps> {
   }
 }
 
+interface AddChipDialogProps {
+  hidden:boolean;
+  info:{[chipName:string]:ChipInfo};
+  hooks:{
+    onAddChip:(chipName:keyof typeof CHIPS|undefined)=>void;
+  };
+}
+
+class AddChipDialog extends React.Component<AddChipDialogProps> {
+  render(): React.ReactNode {
+    if(this.props.hidden){
+      return <div/>;
+    }
+    return (
+      <div className='AddChipDialog'>
+        <div className='AddChipDialogHeader'>
+          <div className='AddChipDialogHeaderText'>Add Chip</div>
+          <button className='MenuButton' onClick={()=>{
+            this.props.hooks.onAddChip(undefined);
+          }}>Cancel</button>
+        </div>
+        <div className='AddChipDialogBody'>
+          {Object.entries(this.props.info).map(([n,c])=>
+            <div key={c.name} className='AddChipDialogChip'
+              onClick={()=>{this.props.hooks.onAddChip(n as keyof typeof CHIPS)}}  
+            >
+              <div className='AddChipDialogChipName'>{c.name}</div>
+              <div className='AddChipDialogChipDetail'>{c.description}</div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+}
+
 class App extends React.Component {
   #chipMoving = false;
   #movingChip = '';
@@ -121,30 +157,12 @@ class App extends React.Component {
       src:{x:number,y:number};
       dst:{x:number,y:number};
     }>;
+    showAddChipDialog:boolean;
   } = {
     canvasPosition:{x:0,y:0},
-    chips:{
-      'source':{
-        position:{x:100,y:100},
-        info:CHIPS.ChipSource.info,
-        ref:React.createRef()
-      },
-      'U1':{
-        position:{x:200,y:200},
-        info:CHIPS.Chip7400.info,
-        ref:React.createRef()
-      }
-    },
-    connections:[
-      {
-        chipA:'source',
-        pinA:'VCC',
-        chipB:'U1',
-        pinB:'A1',
-        src:{x:0,y:0},
-        dst:{x:0,y:0}
-      }
-    ]
+    chips:{},
+    connections:[],
+    showAddChipDialog:false,
   };
   onChipMouseDown(id:string,e:React.MouseEvent){
     this.#chipMoving = true;
@@ -213,6 +231,31 @@ class App extends React.Component {
       e.stopPropagation();
     }
   }
+  onAddChipButtonClick(){
+    this.setState({showAddChipDialog:true});
+  }
+  async onAddChip(chipName:keyof typeof CHIPS|undefined){
+    if(chipName === undefined){
+      this.setState({showAddChipDialog:false});
+      return;
+    }
+    const chipClass = CHIPS[chipName];
+    let chipId:string;
+    do {
+      chipId = ((Math.random()*0xFFFFFFFF)>>>0).toString(32);
+    } while (this.state.chips[chipId] !== undefined);
+    this.setState({
+      showAddChipDialog:false,
+      chips:{
+        ...this.state.chips,
+        [chipId]:{
+          info:chipClass.info,
+          ref:createRef(),
+          position:{x:100,y:100}
+        }
+      }
+    })
+  }
   componentDidMount(): void {
     if(this.#listenersSet) {
       return;
@@ -260,11 +303,6 @@ class App extends React.Component {
   render() {
     return (
       <div className="App">
-        <div className='Menu'>
-          <button className='MenuButton'>Add Chip</button>
-          <button className='MenuButton'>Simulate</button>
-          <button className='MenuButton'>Update</button>
-        </div>
         <div className='Canvas' style={{left:this.state.canvasPosition.x,top:this.state.canvasPosition.y}}>
           {Object.entries(this.state.chips).map(([n,c])=>
             <div key={n} style={{left:c.position.x,top:c.position.y}} className='ChipContainer'>
@@ -280,6 +318,18 @@ class App extends React.Component {
             </div>
           )}
         </div>
+        <div className='Menu'>
+          <button className='MenuButton' onClick={this.onAddChipButtonClick.bind(this)}>Add Chip</button>
+          <button className='MenuButton'>Simulate</button>
+          <button className='MenuButton'>Update</button>
+        </div>
+        <AddChipDialog 
+          hidden={!this.state.showAddChipDialog}
+          info={Object.fromEntries(Object.entries(CHIPS).map(([n,c])=>[n,c.info]))} 
+          hooks={{
+            onAddChip:this.onAddChip.bind(this)
+          }}
+        />
       </div>
     );
   }
