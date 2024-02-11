@@ -1,7 +1,7 @@
 import React, { RefObject, createRef } from 'react';
 import './App.css';
 import { CHIPS } from 'circuit-simulator';
-import { ChipInfo } from 'circuit-simulator/src/Chip';
+import { Chip, ChipInfo } from 'circuit-simulator/src/Chip';
 
 interface ChipProps {
   id:string;
@@ -10,6 +10,8 @@ interface ChipProps {
     onChipMouseDown:(id:string,e:React.MouseEvent)=>void;
     onPinMouseDown:(chip:string,pin:string,e:React.MouseEvent)=>void;
     onPinMouseUp:(chip:string,pin:string,e:React.MouseEvent)=>void;
+    setChipState?:(id:string, state:string, value:any)=>void;
+    getChipState?:(id:string, state:string)=>any;
   };
   selected:boolean;
 }
@@ -70,6 +72,34 @@ class ChipUI extends React.Component<ChipProps> {
             ><div className='PinText'>{pin}</div></div>
           )}
         </div>
+      </div>
+    );
+  }
+}
+
+class ChipUIToggle extends ChipUI {
+  state:{level:boolean} = {
+    level:false
+  };
+  renderCustomBody(): React.ReactNode {
+    return (
+      <button className='ChipBodyToggle'
+        onClick={()=>{
+          const oldLevel = this.state.level;
+          this.props.hooks.setChipState?.(this.props.id,'level',!oldLevel);
+          this.setState({level:!oldLevel});
+        }}>
+        Toggle:{this.state.level?'H':'L'}
+      </button>
+    );
+  }
+}
+
+class ChipUIProbe extends ChipUI {
+  renderCustomBody(): React.ReactNode {
+    return (
+      <div className='ChipBodyProbe'>
+        {this.props.hooks.getChipState?.(this.props.id,'value')??'??'}
       </div>
     );
   }
@@ -214,7 +244,6 @@ class App extends React.Component {
     })
   }
   onPinMouseUp(chip:string,pin:string,e:React.MouseEvent){
-    console.log(`pin mouse up ${chip} ${pin}`);
     if(this.state.drawLine===undefined){
       return;
     }
@@ -464,9 +493,27 @@ class App extends React.Component {
     return (
       <div className="App">
         <div className='Canvas' style={{left:this.state.canvasPosition.x,top:this.state.canvasPosition.y}}>
-          {Object.entries(this.state.chips).map(([n,c])=>
+          {Object.entries(this.state.chips).filter(([n,c])=>!['toggle','probe'].includes(c.info.name)).map(([n,c])=>
             <div key={n} style={{left:c.position.x,top:c.position.y}} className='ChipContainer'>
               <ChipUI ref={c.ref} id={n} info={c.info} selected={n===this.state.selectedChip} hooks={{
+                onChipMouseDown:this.onChipMouseDown.bind(this),
+                onPinMouseDown:this.onPinMouseDown.bind(this),
+                onPinMouseUp:this.onPinMouseUp.bind(this)
+              }} />
+            </div>
+          )}
+          {Object.entries(this.state.chips).filter(([n,c])=>c.info.name==='probe').map(([n,c])=>
+            <div key={n} style={{left:c.position.x,top:c.position.y}} className='ChipContainer'>
+              <ChipUIProbe ref={c.ref} id={n} info={c.info} selected={n===this.state.selectedChip} hooks={{
+                onChipMouseDown:this.onChipMouseDown.bind(this),
+                onPinMouseDown:this.onPinMouseDown.bind(this),
+                onPinMouseUp:this.onPinMouseUp.bind(this)
+              }} />
+            </div>
+          )}
+          {Object.entries(this.state.chips).filter(([n,c])=>c.info.name==='toggle').map(([n,c])=>
+            <div key={n} style={{left:c.position.x,top:c.position.y}} className='ChipContainer'>
+              <ChipUIToggle ref={c.ref as RefObject<ChipUIToggle>} id={n} info={c.info} selected={n===this.state.selectedChip} hooks={{
                 onChipMouseDown:this.onChipMouseDown.bind(this),
                 onPinMouseDown:this.onPinMouseDown.bind(this),
                 onPinMouseUp:this.onPinMouseUp.bind(this)

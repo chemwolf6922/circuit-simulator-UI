@@ -38,7 +38,6 @@ body {
   padding-right: 10px;
   background-color: silver;
   color: black;
-  user-select: none;
 }
 
 .ChipBody {
@@ -80,11 +79,24 @@ body {
   padding-right: 10px;
   background-color: silver;
   color: black;
+}
+
+.ChipBodyProbe {
+  width:6ch;
+  min-width: 6ch;
+  align-self: center;
+  text-align: center;
   user-select: none;
+}
+
+.ChipBodyToggle {
+  width:10ch;
+  min-width:10ch;
 }
 
 .PinText {
   pointer-events: none;
+  user-select: none;
 }
 
 .ConnectionContainer {
