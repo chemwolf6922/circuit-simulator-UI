@@ -1,7 +1,8 @@
 import React, { RefObject, createRef } from 'react';
 import './App.css';
-import { CHIPS } from 'circuit-simulator';
+import { CHIPS, Circuit, Connection } from 'circuit-simulator';
 import { Chip, ChipInfo } from 'circuit-simulator/src/Chip';
+import { Network } from 'circuit-simulator/src/Network';
 
 interface ChipProps {
   id:string;
@@ -86,7 +87,9 @@ class ChipUIToggle extends ChipUI {
       <button className='ChipBodyToggle'
         onClick={()=>{
           const oldLevel = this.state.level;
-          this.props.hooks.setChipState?.(this.props.id,'level',!oldLevel);
+          try {
+            this.props.hooks.setChipState?.(this.props.id,'level',!oldLevel);
+          } catch (error) {}
           this.setState({level:!oldLevel});
         }}>
         Toggle:{this.state.level?'H':'L'}
@@ -97,9 +100,13 @@ class ChipUIToggle extends ChipUI {
 
 class ChipUIProbe extends ChipUI {
   renderCustomBody(): React.ReactNode {
+    let value:string = '??';
+    try {
+      value = this.props.hooks.getChipState?.(this.props.id,'value')??'??';
+    } catch (error) {}
     return (
       <div className='ChipBodyProbe'>
-        {this.props.hooks.getChipState?.(this.props.id,'value')??'??'}
+        {value}
       </div>
     );
   }
@@ -185,10 +192,14 @@ class App extends React.Component {
   #spaceDown = false;
   #screenMoving = false;
   #screenMovingOffset = {x:0,y:0};
+  #circuit:Circuit|undefined = undefined;
+  #chips:Map<string,Chip> = new Map();
+  #connectionToNetwork:Map<object,Network> = new Map();
   state:{
     canvasPosition:{x:number,y:number};
     chips:{[id:string]:{
       position:{x:number,y:number};
+      type:keyof typeof CHIPS;
       info:ChipInfo;
       ref:RefObject<ChipUI>;
     }};
@@ -201,6 +212,7 @@ class App extends React.Component {
       dst:{x:number,y:number};
     }>;
     showAddChipDialog:boolean;
+    simulationActive:boolean;
     drawLine?:{
       srcChip:string;
       srcPin:string;
@@ -214,8 +226,12 @@ class App extends React.Component {
     chips:{},
     connections:[],
     showAddChipDialog:false,
+    simulationActive:false
   };
   onChipMouseDown(id:string,e:React.MouseEvent){
+    if(this.state.simulationActive){
+      return;
+    }
     e.stopPropagation();
     e.preventDefault();
     this.#chipMoving = true;
@@ -230,6 +246,9 @@ class App extends React.Component {
     });
   }
   onPinMouseDown(chip:string,pin:string,e:React.MouseEvent){
+    if(this.state.simulationActive){
+      return;
+    }
     e.stopPropagation();
     e.preventDefault();
     this.setState({
@@ -289,6 +308,9 @@ class App extends React.Component {
     });
   }
   onConnectionMouseDown(index:number, e:React.MouseEvent){
+    if(this.state.simulationActive){
+      return;
+    }
     e.stopPropagation();
     e.preventDefault();
     this.setState({
@@ -371,6 +393,9 @@ class App extends React.Component {
         e.stopPropagation();
         break;
       case 'Delete':
+        if(this.state.simulationActive){
+          break;
+        }
         e.preventDefault();
         e.stopPropagation();
         if(this.state.selectedChip !== undefined){
@@ -427,12 +452,74 @@ class App extends React.Component {
       chips:{
         ...this.state.chips,
         [chipId]:{
+          type:chipName,
           info:chipClass.info,
           ref:createRef(),
           position:{x:100-this.state.canvasPosition.x,y:100-this.state.canvasPosition.y}
         }
       }
     })
+  }
+  onSimulateButtonClick():void {
+    if(this.#circuit !== undefined){
+      /** exit simulation */
+      this.#circuit = undefined;
+      this.#chips.clear();
+      this.#connectionToNetwork.clear();
+      this.setState({simulationActive:false});
+      return;
+    }
+    this.#circuit = new Circuit();
+    for(const [n,c] of Object.entries(this.state.chips)){
+      const chip = new CHIPS[c.type]();
+      this.#circuit.chips.add(chip);
+      this.#chips.set(n,chip);
+    }
+    let connections = [];
+    for(const c of this.state.connections){
+      try {
+        const chipA = this.#chips.get(c.chipA);
+        const chipB = this.#chips.get(c.chipB);
+        if(chipA === undefined || chipB === undefined){
+          throw new Error('Chip not found');
+        }        
+        const pinA = chipA.getPin(c.pinA);
+        const pinB = chipB.getPin(c.pinB);
+        connections.push(new Connection(pinA, pinB));
+      } catch (error) {}
+    }
+    this.#circuit.networks = Connection.getNetworks(connections);
+    for(const c of this.state.connections){
+      try {
+        const chipA = this.#chips.get(c.chipA);
+        if(chipA === undefined){
+          throw new Error('Chip not found');
+        }
+        const pinA = chipA.getPin(c.pinA);
+        for(const n of this.#circuit.networks){
+          if(n.hasPin(pinA)){
+            this.#connectionToNetwork.set(c,n);
+            break;
+          }
+        }
+      } catch (error) {}
+    }
+    this.setState({
+      simulationActive:true,
+      selectedChip:undefined,
+      selectedConnection:undefined
+    });
+  }
+  onUpdateButtonClick():void {
+    if(this.#circuit === undefined){
+      return;
+    }
+    try {
+      this.#circuit.udpate();
+      this.setState(this.state);
+    } catch (error) {
+      alert(`Error in circuit udpate:\n${error}`);
+    }
   }
   componentDidMount(): void {
     if(this.#listenersSet) {
@@ -477,6 +564,22 @@ class App extends React.Component {
     }
     return connections;
   }
+  setChipState(id:string, state:string, value:any){
+    const chip = this.#chips.get(id);
+    if(chip === undefined){
+      throw new Error('Chip not found');
+    }
+    /** This is not good behavior */
+    chip[state as keyof Chip] = value;
+  }
+  getChipState(id:string, state:string):any{
+    const chip = this.#chips.get(id);
+    if(chip === undefined){
+      throw new Error('Chip not found');
+    }
+    /** This is not good behavior */
+    return chip[state as keyof Chip];
+  }
   setState(s:React.SetStateAction<any>){
     /** render chips first, then update connections */
     super.setState(s,()=>{
@@ -493,30 +596,32 @@ class App extends React.Component {
     return (
       <div className="App">
         <div className='Canvas' style={{left:this.state.canvasPosition.x,top:this.state.canvasPosition.y}}>
-          {Object.entries(this.state.chips).filter(([n,c])=>!['toggle','probe'].includes(c.info.name)).map(([n,c])=>
+          {Object.entries(this.state.chips).filter(([n,c])=>!['ChipToggle','ChipProbe'].includes(c.type)).map(([n,c])=>
             <div key={n} style={{left:c.position.x,top:c.position.y}} className='ChipContainer'>
               <ChipUI ref={c.ref} id={n} info={c.info} selected={n===this.state.selectedChip} hooks={{
                 onChipMouseDown:this.onChipMouseDown.bind(this),
                 onPinMouseDown:this.onPinMouseDown.bind(this),
-                onPinMouseUp:this.onPinMouseUp.bind(this)
+                onPinMouseUp:this.onPinMouseUp.bind(this),
               }} />
             </div>
           )}
-          {Object.entries(this.state.chips).filter(([n,c])=>c.info.name==='probe').map(([n,c])=>
+          {Object.entries(this.state.chips).filter(([n,c])=>c.type==='ChipProbe').map(([n,c])=>
             <div key={n} style={{left:c.position.x,top:c.position.y}} className='ChipContainer'>
               <ChipUIProbe ref={c.ref} id={n} info={c.info} selected={n===this.state.selectedChip} hooks={{
                 onChipMouseDown:this.onChipMouseDown.bind(this),
                 onPinMouseDown:this.onPinMouseDown.bind(this),
-                onPinMouseUp:this.onPinMouseUp.bind(this)
+                onPinMouseUp:this.onPinMouseUp.bind(this),
+                getChipState:this.getChipState.bind(this),
               }} />
             </div>
           )}
-          {Object.entries(this.state.chips).filter(([n,c])=>c.info.name==='toggle').map(([n,c])=>
+          {Object.entries(this.state.chips).filter(([n,c])=>c.type==='ChipToggle').map(([n,c])=>
             <div key={n} style={{left:c.position.x,top:c.position.y}} className='ChipContainer'>
               <ChipUIToggle ref={c.ref as RefObject<ChipUIToggle>} id={n} info={c.info} selected={n===this.state.selectedChip} hooks={{
                 onChipMouseDown:this.onChipMouseDown.bind(this),
                 onPinMouseDown:this.onPinMouseDown.bind(this),
-                onPinMouseUp:this.onPinMouseUp.bind(this)
+                onPinMouseUp:this.onPinMouseUp.bind(this),
+                setChipState:this.setChipState.bind(this),
               }} />
             </div>
           )}
@@ -539,9 +644,9 @@ class App extends React.Component {
           :<div/>}
         </div>
         <div className='Menu'>
-          <button className='MenuButton' onClick={this.onAddChipButtonClick.bind(this)}>Add Chip</button>
-          <button className='MenuButton'>Simulate</button>
-          <button className='MenuButton'>Update</button>
+          <button className='MenuButton' disabled={this.state.simulationActive} onClick={this.onAddChipButtonClick.bind(this)}>Add Chip</button>
+          <button className='MenuButton' onClick={this.onSimulateButtonClick.bind(this)}>{this.state.simulationActive?'Edit':'Simulate'}</button>
+          <button className='MenuButton' disabled={!this.state.simulationActive} onClick={this.onUpdateButtonClick.bind(this)}>Update</button>
         </div>
         <AddChipDialog 
           hidden={!this.state.showAddChipDialog}
