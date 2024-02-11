@@ -55,7 +55,7 @@ class ChipUI extends React.Component<ChipProps> {
             <div className='ChipInput' ref={this.#pinRefs[pin]} key={pin}
               onMouseDown={(e)=>{this.props.hooks.onPinMouseDown(this.props.id,pin,e)}}
               onMouseUp={(e)=>(this.props.hooks.onPinMouseUp(this.props.id,pin,e))}
-            ><div className='PinText'>{pin}</div></div>
+            >{pin}</div>
           )}
         </div>
         <div className={this.props.selected?'ChipBody ChipBodySelected':'ChipBody'} 
@@ -70,7 +70,7 @@ class ChipUI extends React.Component<ChipProps> {
             <div className='ChipOutput' ref={this.#pinRefs[pin]} key={pin}
               onMouseDown={(e)=>{this.props.hooks.onPinMouseDown(this.props.id,pin,e)}}
               onMouseUp={(e)=>(this.props.hooks.onPinMouseUp(this.props.id,pin,e))}
-            ><div className='PinText'>{pin}</div></div>
+            >{pin}</div>
           )}
         </div>
       </div>
@@ -129,6 +129,7 @@ interface ConnectionProps {
 }
 
 class ConnectionUI extends React.Component<ConnectionProps> {
+  lineClass = 'ConnectionLine';
   onMouseDown(e:React.MouseEvent){
     this.props.hooks?.onMouseDown(this.props.index??-1,e);
   }
@@ -141,7 +142,7 @@ class ConnectionUI extends React.Component<ConnectionProps> {
       <svg className={this.props.lineType!==undefined?`Connection ConnectionType${this.props.lineType}`:'Connection'} 
         width={width + 10} 
         height={height + 10}>
-        <line className='ConnectionLine'
+        <line className={this.lineClass}
               x1={this.props.info.src.x - anchorX + 5} 
               y1={this.props.info.src.y - anchorY + 5} 
               x2={this.props.info.dst.x - anchorX + 5} 
@@ -150,6 +151,10 @@ class ConnectionUI extends React.Component<ConnectionProps> {
       </svg>
     );
   }
+}
+
+class ConnectionUINew extends ConnectionUI {
+  lineClass = 'ConnectionLineNew';
 }
 
 interface AddChipDialogProps {
@@ -300,7 +305,7 @@ class App extends React.Component {
       },
       selectedChip:undefined,
       selectedConnection:undefined,
-    })
+    });
   }
   onPinMouseUp(chip:string,pin:string,e:React.MouseEvent){
     if(this.state.drawLine===undefined){
@@ -661,7 +666,7 @@ class App extends React.Component {
           {this.state.drawLine !== undefined?
             <div className='ConnectionContainer'
             style={{left:Math.min(this.state.drawLine.src.x,this.state.drawLine.dst.x)-5,top:Math.min(this.state.drawLine.src.y,this.state.drawLine.dst.y)-5}}>
-              <ConnectionUI info={this.state.drawLine}/>
+              <ConnectionUINew lineType='New' info={this.state.drawLine}/>
             </div>
           :<div/>}
         </div>
