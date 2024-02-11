@@ -86,7 +86,11 @@ class ChipUIToggle extends ChipUI {
     return (
       <button className='ChipBodyToggle'
         onClick={()=>{
-          const oldLevel = this.state.level;
+          /** Default old level to true to default the new level to false */
+          let oldLevel = true;
+          try {
+            oldLevel = this.props.hooks.getChipState?.(this.props.id,'level')??true;
+          } catch (error) {}
           try {
             this.props.hooks.setChipState?.(this.props.id,'level',!oldLevel);
           } catch (error) {}
@@ -194,7 +198,7 @@ class App extends React.Component {
   #screenMovingOffset = {x:0,y:0};
   #circuit:Circuit|undefined = undefined;
   #chips:Map<string,Chip> = new Map();
-  #connectionToNetwork:Map<object,Network> = new Map();
+  #connectionToNetwork:Map<number,Network> = new Map();
   state:{
     canvasPosition:{x:number,y:number};
     chips:{[id:string]:{
@@ -228,6 +232,42 @@ class App extends React.Component {
     showAddChipDialog:false,
     simulationActive:false
   };
+  setChipState(id:string, state:string, value:any){
+    const chip = this.#chips.get(id);
+    if(chip === undefined){
+      throw new Error('Chip not found');
+    }
+    /** This is not good behavior */
+    chip[state as keyof Chip] = value;
+  }
+  getChipState(id:string, state:string):any{
+    const chip = this.#chips.get(id);
+    if(chip === undefined){
+      throw new Error('Chip not found');
+    }
+    /** This is not good behavior */
+    return chip[state as keyof Chip];
+  }
+  getConnectionType(index:number):string|undefined{
+    if(this.state.selectedConnection === index){
+      return 'Selected';
+    }
+    const network = this.#connectionToNetwork.get(index);
+    if(network !== undefined){
+      switch (network.state){
+        /** The Fucking stupid tsx parser cannot handle typescript enum. */
+        case 1:
+          return 'High';
+        case 0:
+          return 'Low';
+        case -2:
+          return 'Conflict';
+        case -1:
+          return 'HighImpedance';
+      }
+    }
+    return undefined;
+  }
   onChipMouseDown(id:string,e:React.MouseEvent){
     if(this.state.simulationActive){
       return;
@@ -477,32 +517,29 @@ class App extends React.Component {
     }
     let connections = [];
     for(const c of this.state.connections){
-      try {
-        const chipA = this.#chips.get(c.chipA);
-        const chipB = this.#chips.get(c.chipB);
-        if(chipA === undefined || chipB === undefined){
-          throw new Error('Chip not found');
-        }        
-        const pinA = chipA.getPin(c.pinA);
-        const pinB = chipB.getPin(c.pinB);
-        connections.push(new Connection(pinA, pinB));
-      } catch (error) {}
+      const chipA = this.#chips.get(c.chipA);
+      const chipB = this.#chips.get(c.chipB);
+      if(chipA === undefined || chipB === undefined){
+        throw new Error('Chip not found');
+      }        
+      const pinA = chipA.getPin(c.pinA);
+      const pinB = chipB.getPin(c.pinB);
+      connections.push(new Connection(pinA, pinB));
     }
     this.#circuit.networks = Connection.getNetworks(connections);
-    for(const c of this.state.connections){
-      try {
-        const chipA = this.#chips.get(c.chipA);
-        if(chipA === undefined){
-          throw new Error('Chip not found');
+    for(let i = 0; i < this.state.connections.length; i++){
+      const c = this.state.connections[i];
+      const chipA = this.#chips.get(c.chipA);
+      if(chipA === undefined){
+        throw new Error('Chip not found');
+      }
+      const pinA = chipA.getPin(c.pinA);
+      for(const n of this.#circuit.networks){
+        if(n.hasPin(pinA)){
+          this.#connectionToNetwork.set(i,n);
+          break;
         }
-        const pinA = chipA.getPin(c.pinA);
-        for(const n of this.#circuit.networks){
-          if(n.hasPin(pinA)){
-            this.#connectionToNetwork.set(c,n);
-            break;
-          }
-        }
-      } catch (error) {}
+      }
     }
     this.setState({
       simulationActive:true,
@@ -564,22 +601,6 @@ class App extends React.Component {
     }
     return connections;
   }
-  setChipState(id:string, state:string, value:any){
-    const chip = this.#chips.get(id);
-    if(chip === undefined){
-      throw new Error('Chip not found');
-    }
-    /** This is not good behavior */
-    chip[state as keyof Chip] = value;
-  }
-  getChipState(id:string, state:string):any{
-    const chip = this.#chips.get(id);
-    if(chip === undefined){
-      throw new Error('Chip not found');
-    }
-    /** This is not good behavior */
-    return chip[state as keyof Chip];
-  }
   setState(s:React.SetStateAction<any>){
     /** render chips first, then update connections */
     super.setState(s,()=>{
@@ -622,6 +643,7 @@ class App extends React.Component {
                 onPinMouseDown:this.onPinMouseDown.bind(this),
                 onPinMouseUp:this.onPinMouseUp.bind(this),
                 setChipState:this.setChipState.bind(this),
+                getChipState:this.getChipState.bind(this),
               }} />
             </div>
           )}
@@ -631,7 +653,7 @@ class App extends React.Component {
               <ConnectionUI 
                 index={i}
                 hooks={{onMouseDown:this.onConnectionMouseDown.bind(this)}}
-                lineType={this.state.selectedConnection===i?'Selected':undefined} 
+                lineType={this.getConnectionType(i)} 
                 info={c}
               />
             </div>

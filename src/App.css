@@ -118,6 +118,22 @@ body {
   stroke: skyblue;
 }
 
+.ConnectionTypeHigh {
+  stroke:green;
+}
+
+.ConnectionTypeLow {
+  stroke:blue;
+}
+
+.ConnectionTypeConflict {
+  stroke:red;
+}
+
+.ConnectionTypeHighImpedance {
+  stroke:orange;
+}
+
 .Menu {
   z-index: 1;
   position: absolute;
