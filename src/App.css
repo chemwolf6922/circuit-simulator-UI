@@ -108,7 +108,7 @@ body {
 }
 
 .ConnectionLine {
-  pointer-events: none;
+  pointer-events: all;
 }
 
 .ConnectionLineNew {
