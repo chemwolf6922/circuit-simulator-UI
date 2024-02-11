@@ -4,6 +4,16 @@ import { CHIPS, Circuit, Connection } from 'circuit-simulator';
 import { Chip, ChipInfo } from 'circuit-simulator/src/Chip';
 import { Network } from 'circuit-simulator/src/Network';
 
+type CircuitSave = {
+  chips:{[id:string]:{type:keyof typeof CHIPS,position:{x:number,y:number}}};
+  connections:Array<{
+    chipA:string;
+    pinA:string;
+    chipB:string;
+    pinB:string;
+  }>;
+};
+
 interface ChipProps {
   id:string;
   info:ChipInfo;
@@ -204,6 +214,7 @@ class App extends React.Component {
   #circuit:Circuit|undefined = undefined;
   #chips:Map<string,Chip> = new Map();
   #connectionToNetwork:Map<number,Network> = new Map();
+  #loadFileRef:RefObject<HTMLInputElement> = createRef();
   state:{
     canvasPosition:{x:number,y:number};
     chips:{[id:string]:{
@@ -563,6 +574,77 @@ class App extends React.Component {
       alert(`Error in circuit udpate:\n${error}`);
     }
   }
+  onSaveButtonClick():void {
+    const save = {
+      chips:Object.fromEntries(Object.entries(this.state.chips).map(([n,c])=>[n,{type:c.type,position:c.position}])),
+      connections:this.state.connections.map(c=>({chipA:c.chipA,pinA:c.pinA,chipB:c.chipB,pinB:c.pinB}))
+    };
+    const link = document.createElement('a');
+    link.setAttribute('href',URL.createObjectURL(new Blob([JSON.stringify(save)],{type:'application/json'})));
+    link.setAttribute('download',`circuit-simulator-save-${(new Date()).toLocaleString()}.json`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+  onLoadButtonClick():void {
+    this.#loadFileRef.current?.click();
+  }
+  onLoadSavedFile(e:React.ChangeEvent<HTMLInputElement>):void {
+    const file = e.target.files?.[0];
+    if(file === undefined){
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const contents = e.target?.result;
+      if(typeof contents !== 'string'){
+        return;
+      }
+      const save:CircuitSave = JSON.parse(contents);
+      if(typeof save.chips !== 'object' || save.chips === null){
+        return;
+      }
+      for(const c of Object.values(save.chips)){
+        if(c.type === undefined || c.position === undefined){
+          return;
+        }
+        if(CHIPS[c.type] === undefined){
+          return;
+        }
+        if(typeof c.position.x !== 'number' || typeof c.position.y !== 'number'){
+          return;
+        }
+      }
+      if(!Array.isArray(save.connections)){
+        return;
+      }
+      for(const c of save.connections){
+        if(typeof c.chipA !== 'string' || typeof c.pinA !== 'string' || typeof c.chipB !== 'string' || typeof c.pinB !== 'string'){
+          return;
+        }
+      }
+      this.setState({
+        ...this.state,
+        selectedChip:undefined,
+        selectedConnection:undefined,
+        chips:Object.fromEntries(Object.entries(save.chips).map(([n,c])=>[n,{
+          type:c.type,
+          position:c.position,
+          info:CHIPS[c.type].info,
+          ref:createRef()
+        }])),
+        connections:save.connections.map(c=>({
+          chipA:c.chipA,
+          pinA:c.pinA,
+          chipB:c.chipB,
+          pinB:c.pinB,
+          src:{x:0,y:0},
+          dst:{x:0,y:0}
+        }))
+      });
+    };
+    reader.readAsText(file);
+  }
   componentDidMount(): void {
     if(this.#listenersSet) {
       return;
@@ -672,7 +754,10 @@ class App extends React.Component {
         </div>
         <div className='Menu'>
           <button className='MenuButton' disabled={this.state.simulationActive} onClick={this.onAddChipButtonClick.bind(this)}>Add Chip</button>
-          <button className='MenuButton' onClick={this.onSimulateButtonClick.bind(this)}>{this.state.simulationActive?'Edit':'Simulate'}</button>
+          <button className='MenuButton' disabled={this.state.simulationActive} onClick={this.onSaveButtonClick.bind(this)}>Save</button>
+          <button className='MenuButton' disabled={this.state.simulationActive} onClick={this.onLoadButtonClick.bind(this)}>Load</button>
+          <input type='file' ref={this.#loadFileRef} style={{display:'none'}} onChange={this.onLoadSavedFile.bind(this)}/>
+          <button className='MenuButton' style={{width:'10ch',minWidth:'8ch'}} onClick={this.onSimulateButtonClick.bind(this)}>{this.state.simulationActive?'Edit':'Simulate'}</button>
           <button className='MenuButton' disabled={!this.state.simulationActive} onClick={this.onUpdateButtonClick.bind(this)}>Update</button>
         </div>
         <AddChipDialog 
